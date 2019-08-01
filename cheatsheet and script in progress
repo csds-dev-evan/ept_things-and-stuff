@@ -1,0 +1,157 @@
+EPT Cheatsheet::
+----------------
+### SMTP Spoofing via telnet#####-------------------------------------------------------
+Open your command prompt.
+Now, connect with telnet using the following command:
+telnet example.com 25
+Type ehlo example.com. Some servers also accept helo in place of ehlo.
+ehlo example.com
+Type mail from: username@example.com:
+mail from: username@example.com
+Type rcpt to: friend@hotmail.com, friend2@yahoo.com (replace with your actual recipient name):
+rcpt to: friend@hotmail.com, friend2@yahoo.com
+To write the message - type data, followed by your subject and message. To end the message, put a period on a line by itself and press enter:
+data
+Subject: External Penetration Test
+
+Hello,
+
+This is part of an external penetration test performed by TraceSecurity. Please forward this message to <analyst address> if you receive this.
+
+Thank You,
+Evan Royer
+---------------------------------------------------------------------------------------------------
+fping -s -c 1 -g subnets
+
+eyewitness --web -f root/${PWD}/web-urls.txt
+				
+echo "Running Aggressive Handshake checks and cisco memory leaks"		
+for i in $(cat ike-hosts.txt); do ike-scan -A -M -n bob $i --id=trace -Ppsk$i.txt | tee aggressive$i.txt ; done
+for i in $(cat ike-hosts.txt); do psk-crack -d /usr/share/ike-scan/psk-crack-dictionary psk$i.txt ; tee psk_crack_results$i ; done
+cat aggressive* | grep "Aggressive Mode Handshake returned"
+cat psk_crack_results*
+
+karma search '$domainName' --domain -o breachedlist
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+###################EPT Script::
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+echo "For this to run correctly -- make directory with clients subnets and run initial nmap scan and parse ; then enter parsed directory"
+echo "What is the name of the domain? Press ENTER when done."
+read domainName
+echo "The domain name is $domainName"
+
+if [ -z "$domainName" ]
+	then
+	echo "empty"
+	exit
+fi
+##############Harvester Check###############################################
+harvestcheck2 () {
+   if [ -z "$domainName" ]                           
+     then
+        echo "-Type somehting for domain name-"  # Or no parameter passed.
+     else
+        echo "-The domain name is \"$domainName\".-"
+        echo "Performing Harvest..."
+        theharvester -d $domainName -b google -h -f harvestfile
+	echo
+	echo "Harvester-Ending"
+	#creates two files, one a userfile composed from harvester names, the other a passfile with two default passwords.
+	#these files are used for the metasploit OWA brute force attack, etc
+     	cat harvestfile.xml | tr ">" '\n' | grep @ | cut -d "<" -f 1 | sort -u > userfile  
+     	echo 'P@ssword!' > passfile; 
+     	echo 'Summer2018!@#' >> passfile;
+	echo
+	
+   fi
+   return 0
+}
+#############################################################################
+
+echo "performing whois, dnsenum, metagoofil, karma"
+echo
+harvestcheck2 "$domainName" | tee logs/Harvester-Results.log
+dnsenum $domainName | tee logs/DNS-Enumeration.log
+whois $domainName | tee logs/Whois-Results.log
+metagoofil -d $domainName -t doc,pdf,xls,ppt -l 200 -n 50 -o metagoofiles -f results.html
+karma search $domainName --domain -o breachedlist | tee logs/karma-results
+
+echo "Running Aggressive Handshake checks"		
+for i in $(cat ike-hosts.txt); do ike-scan -A -M -n bob $i --id=trace -Ppsk$i.txt | tee aggressive$i.txt ; done
+for i in $(cat ike-hosts.txt); do psk-crack -d /usr/share/ike-scan/psk-crack-dictionary psk$i.txt ; tee psk_crack_results$i ; done
+cat aggressive* | grep "Aggressive Mode Handshake returned"
+cat psk_crack_results*
+
+echo "performing ftp directory scan (anonymous authentication)"
+for i in $(cat ftp-hosts.txt); do echo $i; curl ftp://$i/ --max-time 30; echo ""; done | tee logs/ftp-scan.txt
+
+echo "icmp check"
+fping -s -c 1 -g subnets >> logs/icmp_results.txt
+
+echo "curl results"
+for i in $(cat web-urls.txt); do curl -Ik $i >> logs/curl_results.txt ; done
+cat curl_results.txt
+
+echo "running directory enumeration"
+while read -r web-urls.txt; do
+  printf 'URL: "%s"\n' "$url"
+
+  outfile="$( tr -s -c 'A-Za-z0-9' '_' <<<"$url" )"
+  printf 'File: "%s"\n' "$outfile"
+
+  dirb "$url" /usr/share/wordlists/dirb/small.txt -o "$outfile"
+done <urls.txt
+
+echo "running web vuln scans via Nikto"
+nikto -h web-urls.txt >> logs/nikto_vulnerability_scans.txt
+cat nikto_vulnerability_scans.txt
+
+echo "performing web screenshots"
+eyewitness --web -f root/${PWD}/web-urls.txt
+
+echo "performing STARTTLS check"
+for i in $(cat smtp-hosts.txt); do ./testssl.sh -t=smtp $i >> logs/STARTTLS_results.txt ; done
+
+echo "performing simple SSL Scans"
+for i in $(cat https-hosts.txt); do sslscan $i | tee scan$i; done
+echo "parsing SSL Scans" 
+/root/sslparse/sslparse.pl scan*
+
+echo "performing vulnerability check on ssl certificates"
+./testssl.sh -H --file https-hosts.txt >> ssl_vuln_scan.txt
+cat 96* | grep -E 'Start|VULNERABLE' >> ssl_vulnerabilities
+
+echo "performing ftp dir scan"
+for i in $(cat ftp-hosts.txt); do echo $i; curl ftp://$i/ --max-time 30; echo ""; done | tee ftp-scan.txt
+
+echo "checking for cloud services and open AWS buckets"
+python3 CloudScraper.py -u $domainName
+python inSp3ctor.py -n $domainName
+
+echo "checking pastebins for company information"
+python pwnbin.py -k "TraceSecurity" -o pastebin_scan
+
+echo "cisco checks stuff"
+auxiliary/scanner/http/cisco_directory_traversal
+auxiliary/scanner/http/cisco_ssl_vpn_priv_esc
+auxiliary/scanner/ike/cisco_ike_benigncertain
+auxiliary/scanner/dlsw/dlsw_leak_capture
+
+echo "IIS and WebDAV Checks"
+auxiliary/scanner/http/iis_internal_ip                                            normal     Yes    Microsoft IIS HTTP Internal IP Disclosure
+auxiliary/scanner/http/iis_shortname_scanner                                      normal     Yes    Microsoft IIS shortname vulnerability scanner
+auxiliary/scanner/http/ms09_020_webdav_unicode_bypass                             normal     Yes    MS09-020 IIS6 WebDAV Unicode Authentication Bypass
+auxiliary/scanner/http/owa_iis_internal_ip 
+-------------------------------------------------------------
+Manual Checks::
+https://www.social-searcher.com
+	-put domain name, and export CSV
+	
+metasploit checks::
+NTP Checks
+Anonymous FTP
+Internal IIS & Internal OWA
+
+To Do::
+Get LinkedIN API key add to LinkedInt tool
